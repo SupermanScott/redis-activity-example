@@ -4,7 +4,6 @@ argparse==1.2.1
 celery==2.5.3
 celery-with-redis==2.5
 distribute==0.6.24
-ipython==0.12.1
 kombu==2.1.8
 python-dateutil==1.5
 redis==2.4.13
