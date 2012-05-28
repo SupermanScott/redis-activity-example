@@ -90,6 +90,43 @@ def unfollow(user_id, follower_id):
         redis_connection.unwatch()
         garbage_collection(removed_keys)
 
+@task
+def delete_activity(user_id, timestamp, activity_type):
+    """Delete an activity from the aggregate and potentially remove aggregate
+    from follower's feeds"""
+    redis_connection = redis.StrictRedis(
+        host='localhost', port=6379, db=REDIS_DB)
+    activity_key = "activity:%s:%s:%s" % (user_id, timestamp, activity_type)
+    all_activities_key = "activities:%s" % (user_id,)
+
+    # Delete the activity and remove it from user's set.
+    redis_connection.delete(activity_key)
+    redis_connection.srem(all_activities_key, activity_key)
+
+    day = math.floor(float(timestamp) / 86400)
+    for version in VERSIONS:
+        aggr_key = "activity_aggr:%s:%s:%s:%s" % (version, activity_type,
+                                                  user_id, day,)
+        redis_connection.srem(aggr_key, activity_key)
+        size = redis_connection.scard(aggr_key)
+        if not size:
+            redis_connection.watch(aggr_key)
+            try:
+                redis_connection.delete(aggr_key + ":counter")
+
+                # Remove from followers
+                for feed_user_id in get_followers(user_id):
+                    feed_key = "activity_feed:%s:%s" % (version, feed_user_id,)
+                    redis_connection.zrem(feed_key, aggr_key)
+
+                # Remove from profile feed.
+                profile_feed_key = "activity_profile:%s:%s" % (version, user_id)
+                redis_connection.zrem(profile_feed_key, aggr_key)
+            except redis.exceptions.WatchError:
+                # Someone else either deleted the aggr, or added a new item to it.
+                pass
+            redis_connection.unwatch()
+
 def save_activity(user_id, timestamp, activity_type):
     """Saves the activity to the redis database"""
     redis_connection = redis.StrictRedis(
