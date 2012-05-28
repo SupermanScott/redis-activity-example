@@ -13,6 +13,7 @@ MAX_ACTIVITIES = 10
 
 @task
 def new_activity(user_id, timestamp, activity_type):
+    """Record a new activity in all of user_id's follower's feeds"""
     activity = save_activity(user_id, timestamp, activity_type)
 
     for version in VERSIONS:
